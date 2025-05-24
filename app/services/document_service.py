@@ -1,8 +1,9 @@
 import os
 import uuid
 import logging
-from datetime import datetime
-from typing import Dict, Any, Optional
+from datetime import datetime, timezone
+from typing import Dict, Any, Optional, List
+import aiosqlite
 
 from app.core.llama_index_manager import LlamaIndexManager
 from app.models.schemas import DocumentMetadata
@@ -11,6 +12,8 @@ from app.models.schemas import DocumentMetadata
 class DocumentService:
     """文档服务，处理文档上传和处理"""
     
+    DB_PATH = "metadata.db"
+
     def __init__(self):
         self.llama_index_manager = LlamaIndexManager()
         self.upload_dir = "uploads"
@@ -18,6 +21,22 @@ class DocumentService:
         # 确保上传目录存在
         os.makedirs(self.upload_dir, exist_ok=True)
     
+    async def initialize_db(self):
+        """初始化数据库并创建表（如果不存在）"""
+        async with aiosqlite.connect(self.DB_PATH) as db:
+            await db.execute("""
+            CREATE TABLE IF NOT EXISTS document_metadata (
+                doc_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                doc_name TEXT NOT NULL,
+                doc_type TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """)
+            await db.commit()
+            logging.info("数据库表 'document_metadata' 初始化完成。")
+
     def save_uploaded_file(self, file, user_id: str) -> str:
         """保存上传的文件"""
         # 创建用户目录
@@ -39,7 +58,7 @@ class DocumentService:
     async def process_document(self, file_path: str, user_id: str, 
                         doc_name: Optional[str] = None,
                         doc_type: Optional[str] = None,) -> Optional[str]:
-        """处理文档"""
+        """处理文档并将元数据保存到SQLite"""
         try:
             # 如果没有提供文档名，则使用原始文件名
             if not doc_name:
@@ -49,24 +68,39 @@ class DocumentService:
             if not doc_type:
                 doc_type = os.path.splitext(file_path)[1].lstrip('.')
             
-            # 准备文档元数据
-            metadata = {
-                "file_name": doc_name,
+            # 准备LlamaIndex的元数据（可能与SQLite存储的略有不同或子集）
+            llama_index_specific_metadata = {
+                "file_name": doc_name, # Original filename for LlamaIndex
                 "file_type": doc_type,
-                "user_id": user_id,
+                "user_id": user_id, 
+                # Add any other metadata LlamaIndex specifically needs for processing
             }
-            
-            # 处理文档
-            doc_id = await self.llama_index_manager.process_document(
+
+            # Pass necessary metadata to LlamaIndex, potentially including our generated_doc_id
+            # if LlamaIndex can use it (e.g., as a top-level document ID).
+            # The metadata dict for LlamaIndex might be different from what we store in SQLite.
+            generated_doc_id = await self.llama_index_manager.process_document(
                 file_path=file_path,
-                user_id=user_id,
-                doc_metadata=metadata
+                user_id=user_id, # For LlamaIndex's internal user separation if any
+                doc_metadata={**llama_index_specific_metadata} # Example
             )
+
+            # 元数据存入SQLite
+            current_time_utc = datetime.now(timezone.utc).isoformat()
             
-            return doc_id
-        
+            async with aiosqlite.connect(self.DB_PATH) as db:
+                await db.execute("""
+                INSERT INTO document_metadata (doc_id, user_id, doc_name, doc_type, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, (generated_doc_id, user_id, doc_name, doc_type, current_time_utc, current_time_utc))
+                await db.commit()
+            
+            logging.info(f"文档元数据已保存到SQLite: doc_id={generated_doc_id}, user_id={user_id}")
+            return generated_doc_id # Return our generated doc_id
+
         except Exception as e:
-            logging.error(f"处理文档出错: {str(e)}")
+            logging.error(f"处理文档或保存元数据出错: {str(e)}")
+            # Consider more specific error handling or re-raising
             return None
     
     def delete_temp_file(self, file_path: str) -> bool:
@@ -78,4 +112,41 @@ class DocumentService:
             return False
         except Exception as e:
             logging.error(f"删除文件出错: {str(e)}")
-            return False 
+            return False
+
+    async def get_documents_by_user_id(self, user_id: str) -> List[DocumentMetadata]:
+        """根据用户ID从SQLite获取该用户上传的文档元数据列表"""
+        documents = []
+        try:
+            async with aiosqlite.connect(self.DB_PATH) as db:
+                # Set row_factory to aiosqlite.Row to access columns by name
+                db.row_factory = aiosqlite.Row
+                cursor = await db.execute(
+                    "SELECT doc_id, user_id, doc_name, doc_type, created_at, updated_at FROM document_metadata WHERE user_id = ? ORDER BY created_at DESC", 
+                    (user_id,)
+                )
+                rows = await cursor.fetchall()
+                
+                if rows:
+                    for row in rows:
+                        # Convert row object to dict or directly access fields
+                        documents.append(DocumentMetadata(
+                            doc_id=row["doc_id"],
+                            user_id=row["user_id"],
+                            doc_name=row["doc_name"],
+                            doc_type=row["doc_type"],
+                            created_at=row["created_at"],
+                            updated_at=row["updated_at"]
+                        ))
+            
+            if not documents:
+                logging.info(f"No documents found in SQLite for user_id: {user_id}")
+            else:
+                logging.info(f"Retrieved {len(documents)} documents from SQLite for user_id: {user_id}")
+            
+            return documents
+        
+        except Exception as e:
+            logging.error(f"Error fetching documents from SQLite for user_id {user_id}: {str(e)}")
+            # Depending on desired behavior, re-raise or return empty list/raise HTTPException
+            return [] # Return empty list on error for now 

@@ -50,6 +50,11 @@ class QueryResponse(BaseModel):
     sources: Optional[List[DocumentSource]] = Field(None, description="来源文档")
     
 
+class UserDocumentsResponse(BaseModel):
+    """用户文档列表响应模型"""
+    documents: List[DocumentMetadata] = Field(..., description="用户上传的文档元数据列表")
+
+
 class EntityNode(BaseModel):
     """实体节点模型，用于图数据库"""
     node_id: str = Field(..., description="节点ID")

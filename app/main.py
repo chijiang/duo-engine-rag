@@ -1,9 +1,10 @@
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from contextlib import asynccontextmanager
 from app.api.router import api_router
 from app.config.settings import API_HOST, API_PORT
+from app.api.endpoints import document_service
 
 import nest_asyncio
 nest_asyncio.apply()
@@ -14,11 +15,20 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    logging.info("应用程序启动：正在初始化数据库...")
+    await document_service.initialize_db()
+    logging.info("数据库初始化完成。")
+    yield
+    logging.info("应用程序关闭。")
+
 # 创建FastAPI应用
 app = FastAPI(
     title="LlamaIndex双引擎RAG系统",
     description="基于LlamaIndex框架，集成Milvus向量数据库和NebulaGraph图数据库的RAG系统",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan
 )
 
 # 添加CORS中间件

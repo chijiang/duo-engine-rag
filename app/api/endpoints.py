@@ -5,7 +5,8 @@ from app.models.schemas import (
     DocumentUploadRequest,
     QueryRequest,
     QueryResponse,
-    DocumentSource
+    DocumentSource,
+    UserDocumentsResponse
 )
 from app.services.document_service import DocumentService
 from app.services.query_service import QueryService
@@ -43,6 +44,18 @@ async def upload_document(
         raise HTTPException(status_code=500, detail="文档处理失败")
     
     return {"message": "文档上传成功", "doc_id": doc_id}
+
+
+@router.get("/documents/user/{user_id}", response_model=UserDocumentsResponse)
+async def list_user_documents(user_id: str):
+    """获取指定用户上传的所有文档元数据"""
+    documents = await document_service.get_documents_by_user_id(user_id)
+    if not documents: # Optional: could also return empty list directly from service
+        # Depending on preference, either return an empty list in the response model
+        # or raise an HTTPException for 404 Not Found.
+        # The current service method returns an empty list, which is fine.
+        pass 
+    return UserDocumentsResponse(documents=documents)
 
 
 @router.post("/query", response_model=QueryResponse)

@@ -2,7 +2,7 @@ from pymilvus import connections, Collection, utility
 from typing import Optional, List, Dict, Any
 from app.config.settings import MILVUS_HOST, MILVUS_PORT, MILVUS_COLLECTION_PREFIX, MILVUS_DIMENSION
 
-
+@DeprecationWarning("MilvusClient is deprecated.")
 class MilvusClient:
     """Milvus向量数据库客户端"""
     

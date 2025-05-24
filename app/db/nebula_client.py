@@ -10,7 +10,7 @@ import uuid
 from app.config.settings import NEBULA_HOSTS, NEBULA_USER, NEBULA_PASSWORD
 from app.utils.entity_extractor import EntityExtractor
 
-
+@DeprecationWarning("NebulaClient is deprecated.")
 class NebulaClient:
     """NebulaGraph图数据库客户端"""
     

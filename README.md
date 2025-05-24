@@ -77,10 +77,26 @@ TEXT_SPLITTER=sentence # Options: 'word', 'sentence', 'token', etc.
 
 ### Running the Application
 
-```bash
-python -m app.main
-```
-The API will be accessible at `http://localhost:8108`, with interactive documentation available at `http://localhost:8108/docs`.
+There are a couple of ways to run the application:
+
+1.  **Using the script in `app/main.py` (if configured for production/simpler startup):**
+    ```bash
+    python -m app.main
+    ```
+    *Note: Ensure `app/main.py` is set up to run uvicorn with the correct parameters, including `--loop asyncio` if needed, as shown below.*
+
+2.  **Directly with Uvicorn (recommended for development, matches debug configuration):**
+    ```bash
+    python -m uvicorn app.main:app --reload --host $API_HOST --port $API_PORT --loop asyncio
+    ```
+    Or, using the specific values from your debug configuration if environment variables are not set in your shell:
+    ```bash
+    python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8108 --loop asyncio
+    ```
+
+**Important Note on `asyncio`:** LlamaIndex extensively uses `asyncio` for its operations. To ensure compatibility and prevent potential issues, FastAPI (and Uvicorn) **must** also be configured to use the `asyncio` event loop. This is achieved by including the `--loop asyncio` flag when running Uvicorn. Your `app/main.py` also includes `nest_asyncio.apply()` which helps manage asyncio event loops, particularly in environments like Jupyter notebooks, but explicitly setting the loop for Uvicorn is crucial for FastAPI services.
+
+The API will be accessible at `http://localhost:8108` (or your configured host/port), with interactive documentation available at `http://localhost:8108/docs`.
 
 ## API Usage Examples
 
@@ -171,7 +187,17 @@ Contributions are welcome! Please read our `CONTRIBUTING.md` (you'll need to cre
 
 ## License
 
-This project is licensed under the [Your License Here] License. See the `LICENSE` file (you'll need to create this file and choose a license like MIT, Apache 2.0, etc.) for more details.
+This project is licensed under the [Creative Commons Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0)](http://creativecommons.org/licenses/by-nc/4.0/). 
+
+You are free to:
+*   **Share** — copy and redistribute the material in any medium or format
+*   **Adapt** — remix, transform, and build upon the material
+
+Under the following terms:
+*   **Attribution** — You must give appropriate credit, provide a link to the license, and indicate if changes were made. You may do so in any reasonable manner, but not in any way that suggests the licensor endorses you or your use.
+*   **NonCommercial** — You may not use the material for commercial purposes.
+
+See the `LICENSE` file in the root of the project for more details.
 
 ---
 

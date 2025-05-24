@@ -8,7 +8,7 @@ import json
 from llama_index.core.llms import OpenAI
 from app.config.settings import OPENAI_API_KEY, OPENAI_MODEL
 
-
+@DeprecationWarning("EntityExtractor is deprecated. Use LlamaIndexManager.extract_entities instead.")
 class EntityExtractor:
     """实体提取器，负责从文本中提取实体"""
     

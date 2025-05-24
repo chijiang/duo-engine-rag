@@ -85,22 +85,22 @@ class LlamaIndexManager:
         self.user_index_dict: Dict[str, PropertyGraphIndexImpl] = {}
 
         # 配置LLM和Embedding模型
-        self.llm = LMStudio(
-            model_name="qwen2.5-7b-instruct-1m",
-            base_url="http://127.0.0.1:1234/v1",
-            context_window=128000,
-            temperature=0.,
-            timeout=1000,
-        )
+        # self.llm = LMStudio(
+        #     model_name="qwen2.5-7b-instruct-1m",
+        #     base_url="http://127.0.0.1:1234/v1",
+        #     context_window=128000,
+        #     temperature=0.,
+        #     timeout=1000,
+        # )
 
-        self.conclusion_llm = LMStudio(
-            model_name="qwen3-30b-a3b",
-            base_url="http://127.0.0.1:1234/v1",
-            context_window=128000,
-            temperature=0.1,
-            timeout=1000,
-        )
-        # self.llm = DeepSeek(model=LLM_MODEL, api_key=DEEPSEEK_API_KEY)
+        # self.conclusion_llm = LMStudio(
+        #     model_name="qwen3-30b-a3b",
+        #     base_url="http://127.0.0.1:1234/v1",
+        #     context_window=128000,
+        #     temperature=0.1,
+        #     timeout=1000,
+        # )
+        self.llm = DeepSeek(model=LLM_MODEL, api_key=DEEPSEEK_API_KEY)
         self.embed_model = ZhipuAIEmbedding(api_key=ZHIPU_API_KEY)
         Settings.llm = self.llm
         Settings.embed_model = self.embed_model
@@ -217,7 +217,7 @@ class LlamaIndexManager:
                     documents,
                     storage_context=storage_context,
                     show_progress=True,
-                    embed_kg_nodes=False,  # 根据您的设置
+                    embed_kg_nodes=True,
                 )
 
                 graph_index.storage_context.persist(
@@ -287,7 +287,8 @@ class LlamaIndexManager:
         context_text = "\n\n".join([result.get_content() for result in all_results])
 
         # 生成回答
-        response = self.conclusion_llm.complete(
+        # response = self.conclusion_llm.complete(
+        response = self.llm.complete(
             f'''\
 ## 请仅基于以下`相关信息`回答问题，如未提供任何信息，则提示用户缺少相关信息，无法回答问题。
 ## 相关信息：
