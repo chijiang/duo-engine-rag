@@ -53,10 +53,11 @@ Create a `.env` file in the project root (you can copy `.env.example` if provide
 API_PORT=8108
 API_HOST=0.0.0.0
 
-# OpenAI Configuration
-OPENAI_API_KEY=your_openai_api_key
-OPENAI_MODEL=gpt-4o # Or your preferred model
-OPENAI_EMBEDDING_MODEL=text-embedding-ada-002
+# LLM Configuration
+DEEPSEEK_API_KEY=your_deepseek_api_key
+ZHIPU_API_KEY=your_zhipu_api_key
+LLM_MODEL=chatgpt-4o  # Or your preferred model
+EMBEDDING_MODEL=text-embedding  # Or your preferred embedding model
 
 # Milvus Configuration
 MILVUS_HOST=localhost

@@ -162,7 +162,7 @@ class LlamaIndexManager:
             )
         return self.graph_store_dict[user_id]
 
-    def _get_vec_store(self, user_id: str):
+    def _get_vec_store(self, user_id: str) -> MilvusVectorStore:
         if user_id not in self.vec_store_dict:
             self.vec_store_dict[user_id] = MilvusVectorStore(
                 uri=f"http://{MILVUS_HOST}:{MILVUS_PORT}",

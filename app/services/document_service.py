@@ -4,7 +4,11 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 import aiosqlite
-
+from llama_index.core.vector_stores import (
+    MetadataFilter,
+    MetadataFilters,
+    FilterOperator,
+)
 from app.core.llama_index_manager import LlamaIndexManager
 from app.models.schemas import DocumentMetadata
 
@@ -150,3 +154,62 @@ class DocumentService:
             logging.error(f"Error fetching documents from SQLite for user_id {user_id}: {str(e)}")
             # Depending on desired behavior, re-raise or return empty list/raise HTTPException
             return [] # Return empty list on error for now 
+
+    async def delete_document(self, user_id: str, doc_id: str) -> bool:
+        """删除文档及其相关数据
+        
+        Args:
+            user_id: 用户ID
+            doc_id: 文档ID
+            
+        Returns:
+            bool: 删除是否成功
+        """
+        try:
+            # 1. 从SQLite删除元数据
+            async with aiosqlite.connect(self.DB_PATH) as db:
+                await db.execute(
+                    "DELETE FROM document_metadata WHERE doc_id = ? AND user_id = ?",
+                    (doc_id, user_id)
+                )
+                await db.commit()
+            
+            # 2. 从LlamaIndex管理的存储中删除（包括Milvus和NebulaGraph）
+            # 获取用户的索引
+            user_index = self.llama_index_manager._get_user_index(user_id)
+            if user_index:
+                # # 创建过滤器以匹配文档ID
+                # filters = MetadataFilters(
+                #     filters=[
+                #         MetadataFilter(
+                #             key="document_id",
+                #             operator=FilterOperator.EQ,
+                #             value=doc_id
+                #         ),
+                #         MetadataFilter(
+                #             key="user_id",
+                #             operator=FilterOperator.EQ,
+                #             value=user_id
+                #         )
+                #     ]
+                # )
+                
+                # 从向量存储中删除
+                vec_store = self.llama_index_manager._get_vec_store(user_id)
+                if vec_store:
+                    vec_store.delete(ref_doc_id=doc_id)
+                
+                # 从图存储中删除
+                graph_store = self.llama_index_manager._get_graph_store(user_id)
+                if graph_store:
+                    # 删除相关的节点和边
+                    graph_store.delete(properties={"document_id": doc_id, "user_id": user_id})
+                    # graph_store.delete_nodes(filters=filters)
+                    # graph_store.delete_edges(filters=filters)
+            
+            logging.info(f"成功删除文档: user_id={user_id}, doc_id={doc_id}")
+            return True
+            
+        except Exception as e:
+            logging.error(f"删除文档时出错: {str(e)}")
+            return False 

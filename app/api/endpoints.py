@@ -6,7 +6,8 @@ from app.models.schemas import (
     QueryRequest,
     QueryResponse,
     DocumentSource,
-    UserDocumentsResponse
+    UserDocumentsResponse,
+    DeleteDocumentRequest
 )
 from app.services.document_service import DocumentService
 from app.services.query_service import QueryService
@@ -86,3 +87,17 @@ async def query(query_request: QueryRequest):
     )
     
     return response 
+
+
+@router.delete("/documents/delete", status_code=200)
+async def delete_document(request: DeleteDocumentRequest):
+    """删除文档接口"""
+    success = await document_service.delete_document(
+        user_id=request.user_id,
+        doc_id=request.doc_id
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="文档删除失败")
+    
+    return {"message": "文档删除成功"} 

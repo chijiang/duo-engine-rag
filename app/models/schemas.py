@@ -68,4 +68,10 @@ class Relationship(BaseModel):
     source_id: str = Field(..., description="源节点ID")
     target_id: str = Field(..., description="目标节点ID")
     rel_type: str = Field(..., description="关系类型")
-    properties: Optional[Dict[str, Any]] = Field(None, description="关系属性") 
+    properties: Optional[Dict[str, Any]] = Field(None, description="关系属性")
+
+
+class DeleteDocumentRequest(BaseModel):
+    """删除文档请求模型"""
+    user_id: str = Field(..., description="用户ID")
+    doc_id: str = Field(..., description="要删除的文档ID") 
