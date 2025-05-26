@@ -4,6 +4,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 import aiosqlite
+from nebula3.gclient.net import ConnectionPool
+from nebula3.Config import Config as NebulaConfig
 from llama_index.core.vector_stores import (
     MetadataFilter,
     MetadataFilters,
@@ -11,12 +13,14 @@ from llama_index.core.vector_stores import (
 )
 from app.core.llama_index_manager import LlamaIndexManager
 from app.models.schemas import DocumentMetadata
+from app.config.settings import NEBULA_HOSTS, NEBULA_USER, NEBULA_PASSWORD
 
 
 class DocumentService:
     """文档服务，处理文档上传和处理"""
     
     DB_PATH = "metadata.db"
+    NEBULA_SPACE_NAME = "llamaindex_nebula_property_graph"
 
     def __init__(self):
         self.llama_index_manager = LlamaIndexManager()
@@ -25,8 +29,133 @@ class DocumentService:
         # 确保上传目录存在
         os.makedirs(self.upload_dir, exist_ok=True)
     
+    def _create_nebula_connection_pool(self):
+        """创建NebulaGraph连接池"""
+        nebula_configs = []
+        # 处理NEBULA_HOSTS可能是字符串或列表的情况
+        hosts = NEBULA_HOSTS if isinstance(NEBULA_HOSTS, list) else [NEBULA_HOSTS]
+        
+        for host_port in hosts:
+            host, port = host_port.split(":")
+            config = NebulaConfig()
+            config.max_connection_pool_size = 10
+            nebula_configs.append((host, int(port), config))
+        
+        connection_pool = ConnectionPool()
+        connection_pool.init(nebula_configs, NEBULA_USER, NEBULA_PASSWORD)
+        return connection_pool
+    
+    def _create_nebula_space(self) -> bool:
+        """创建NebulaGraph空间"""
+        connection_pool = None
+        try:
+            connection_pool = self._create_nebula_connection_pool()
+            
+            with connection_pool.session_context(NEBULA_USER, NEBULA_PASSWORD) as session:
+                # 创建空间（如果不存在）
+                create_space_stmt = f"""
+                CREATE SPACE IF NOT EXISTS {self.NEBULA_SPACE_NAME} (
+                    partition_num = 10,
+                    replica_factor = 1,
+                    vid_type = FIXED_STRING(64)
+                )
+                """
+                
+                result = session.execute(create_space_stmt)
+                if not result.is_succeeded():
+                    logging.error(f"创建NebulaGraph空间失败: {result.error_msg()}")
+                    return False
+                
+                logging.info(f"NebulaGraph空间 '{self.NEBULA_SPACE_NAME}' 创建成功或已存在")
+                
+                # 使用空间
+                use_space_stmt = f"USE {self.NEBULA_SPACE_NAME}"
+                result = session.execute(use_space_stmt)
+                if not result.is_succeeded():
+                    logging.error(f"使用NebulaGraph空间失败: {result.error_msg()}")
+                    return False
+                
+                # 创建基本的标签和边类型（LlamaIndex需要的）
+                # 这些是NebulaPropertyGraphStore使用的默认标签和边类型
+                create_statements = [
+                    """
+                    CREATE TAG IF NOT EXISTS entity(
+                        `file_path` STRING,
+                        `file_name` STRING,
+                        `file_type` STRING,
+                        `file_size` INT,
+                        `creation_date` STRING,
+                        `last_modified_date` STRING,
+                        `_node_content` STRING,
+                        `_node_type` STRING,
+                        `document_id` STRING,
+                        `ref_doc_id` STRING,
+                        `triplet_source_id` STRING,
+                        `user_id` STRING,
+                        `created_at` STRING,
+                        `doc_id` STRING,
+                        `updated_at` STRING
+                    )
+                    """,
+                    """
+                    CREATE TAG IF NOT EXISTS chunk(
+                        `file_path` STRING,
+                        `file_name` STRING,
+                        `file_type` STRING,
+                        `file_size` INT,
+                        `creation_date` STRING,
+                        `last_modified_date` STRING,
+                        `_node_content` STRING,
+                        `_node_type` STRING,
+                        `document_id` STRING,
+                        `ref_doc_id` STRING,
+                        `triplet_source_id` STRING,
+                        `user_id` STRING,
+                        `created_at` STRING,
+                        `doc_id` STRING,
+                        `updated_at` STRING
+                    )
+                    """,
+                    """
+                    CREATE EDGE IF NOT EXISTS relationship(
+                        `file_path` STRING,
+                        `file_name` STRING,
+                        `file_type` STRING,
+                        `file_size` INT,
+                        `creation_date` STRING,
+                        `last_modified_date` STRING,
+                        `_node_content` STRING,
+                        `_node_type` STRING,
+                        `document_id` STRING,
+                        `ref_doc_id` STRING,
+                        `triplet_source_id` STRING,
+                        `user_id` STRING,
+                        `created_at` STRING,
+                        `doc_id` STRING,
+                        `updated_at` STRING
+                    )
+                    """
+                ]
+                
+                for stmt in create_statements:
+                    result = session.execute(stmt)
+                    if not result.is_succeeded():
+                        logging.warning(f"创建标签/边类型时出现警告: {result.error_msg()}")
+                        # 不返回False，因为这些可能已经存在
+                
+                logging.info("NebulaGraph基本schema创建完成")
+                return True
+                
+        except Exception as e:
+            logging.error(f"创建NebulaGraph空间时出错: {str(e)}")
+            return False
+        finally:
+            if connection_pool:
+                connection_pool.close()
+
     async def initialize_db(self):
         """初始化数据库并创建表（如果不存在）"""
+        # 1. 初始化SQLite数据库
         async with aiosqlite.connect(self.DB_PATH) as db:
             await db.execute("""
             CREATE TABLE IF NOT EXISTS document_metadata (
@@ -40,6 +169,16 @@ class DocumentService:
             """)
             await db.commit()
             logging.info("数据库表 'document_metadata' 初始化完成。")
+        
+        # 2. 初始化NebulaGraph空间
+        try:
+            if self._create_nebula_space():
+                logging.info("NebulaGraph空间初始化完成。")
+            else:
+                logging.error("NebulaGraph空间初始化失败，但系统将继续运行。")
+        except Exception as e:
+            logging.error(f"NebulaGraph初始化过程中出现异常: {str(e)}")
+            logging.warning("NebulaGraph初始化失败，但系统将继续运行。请检查NebulaGraph连接配置。")
 
     def save_uploaded_file(self, file, user_id: str) -> str:
         """保存上传的文件"""
