@@ -36,8 +36,8 @@ Ensure the following are installed and running:
 
 1.  Clone the repository (if you haven't already):
     ```bash
-    # git clone <your-repository-url>
-    # cd <your-project-directory>
+    # git clone https://github.com/chijiang/duo-engine-rag.git
+    # cd duo-engine-rag
     ```
 2.  Install dependencies:
     ```bash
@@ -54,10 +54,10 @@ API_PORT=8108
 API_HOST=0.0.0.0
 
 # LLM Configuration
-DEEPSEEK_API_KEY=your_deepseek_api_key
-ZHIPU_API_KEY=your_zhipu_api_key
-LLM_MODEL=chatgpt-4o  # Or your preferred model
-EMBEDDING_MODEL=text-embedding  # Or your preferred embedding model
+DEEPSEEK_API_KEY=your_deepseek_api_key # for llm
+ZHIPU_API_KEY=your_zhipu_api_key # for embedding
+LLM_MODEL=deepseek-chat  # Or your preferred model
+EMBEDDING_MODEL=embedding-3  # Or your preferred embedding model
 
 # Milvus Configuration
 MILVUS_HOST=localhost
@@ -109,7 +109,39 @@ curl -X POST "http://localhost:8108/api/documents/upload" \
   -H "Content-Type: multipart/form-data" \
   -F "file=@/path/to/your/document.pdf" \
   -F "user_id=user123" \
-  -F "doc_name=Example Document"
+  -F "doc_name=Example Document" \
+  -F "doc_type=pdf"
+```
+
+**Response:**
+```json
+{
+  "message": "文档上传成功",
+  "doc_id": "generated-uuid-here"
+}
+```
+
+### Get User Documents
+
+```bash
+curl -X GET "http://localhost:8108/api/documents/user/user123" \
+  -H "accept: application/json"
+```
+
+**Response:**
+```json
+{
+  "documents": [
+    {
+      "doc_id": "generated-uuid-here",
+      "doc_name": "Example Document",
+      "doc_type": "pdf",
+      "user_id": "user123",
+      "created_at": "2024-01-01T12:00:00Z",
+      "updated_at": "2024-01-01T12:00:00Z"
+    }
+  ]
+}
 ```
 
 ### Perform a Query
@@ -121,9 +153,57 @@ curl -X POST "http://localhost:8108/api/query" \
   -d '{
     "user_id": "user123",
     "query": "What are the main findings of this document?",
-    "include_sources": true
+    "include_sources": true,
+    "similarity_top_k": 5,
+    "graph_top_k": 5
   }'
 ```
+
+**Response:**
+```json
+{
+  "answer": "Based on the documents, the main findings include...",
+  "sources": [
+    {
+      "doc_id": "generated-uuid-here",
+      "doc_name": "Example Document",
+      "content": "Relevant content snippet from the document...",
+      "score": 0.85
+    }
+  ]
+}
+```
+
+### Delete a Document
+
+```bash
+curl -X DELETE "http://localhost:8108/api/documents/delete" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "user123",
+    "doc_id": "generated-uuid-here"
+  }'
+```
+
+**Response:**
+```json
+{
+  "message": "文档删除成功"
+}
+```
+
+### API Endpoints Summary
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/documents/upload` | Upload and process a document |
+| GET | `/api/documents/user/{user_id}` | Get all documents for a user |
+| POST | `/api/query` | Query the knowledge base |
+| DELETE | `/api/documents/delete` | Delete a specific document |
+| GET | `/` | API information and health check |
+| GET | `/docs` | Interactive API documentation (Swagger UI) |
+| GET | `/redoc` | Alternative API documentation (ReDoc) |
 
 ## System Workflow
 
@@ -177,14 +257,6 @@ curl -X POST "http://localhost:8108/api/query" \
 *   Implementation of user authentication and granular permission management.
 *   Advanced retrieval and result fusion strategies.
 *   Development of a user-friendly web interface.
-
-## Contributing
-
-Contributions are welcome! Please read our `CONTRIBUTING.md` (you'll need to create this file) for guidelines on how to contribute to this project. This may include:
-
-*   Reporting bugs
-*   Suggesting enhancements
-*   Submitting pull requests
 
 ## License
 
